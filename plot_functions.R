@@ -29,22 +29,43 @@ Themes = function(pt_size = 8,
                   axis_y_fontsize = 28,
                   titlefontsize = 28,
                   linesize = 2,
-                  rotate = T){
+                  rotate = T,angle = 45,
+                  aspect.ratio = 0.5,
+                  hjust = 1,vjust = 0,
+                  theme = 'cowplot'){
     require(cowplot)
     require(ggplot2)
+  if(theme=='test'){
+    a = theme_test(base_rect_size =linesize,base_family = 'sans' )+
+      theme(  text = element_text( size = fontsize),
+              axis.ticks = element_line(linewidth = linesize),
+              axis.text.x = element_text( size = axis_x_fontsize),
+              axis.text.y = element_text( size = axis_y_fontsize),
+              axis.title = element_text(size = fontsize,family = "sans"),
+              # axis.line = element_line(linewidth = linesize),
+              strip.background = element_blank(),
+              aspect.ratio = aspect.ratio,
+              strip.text = element_text(size = titlefontsize,face = "bold"),
+              plot.title = element_text(hjust = 0.5,size = titlefontsize),
+              plot.margin = margin(1,1,1,1,'pt'),
+              legend.position = "right")
+  }else{
     a = theme_cowplot(font_family = "sans")+
-            theme(  text = element_text( size = fontsize),
-                    axis.ticks = element_line(linewidth = linesize),
-                    axis.text.x = element_text( size = axis_x_fontsize),
-                    axis.text.y = element_text( size = axis_y_fontsize),
-                    axis.title = element_text(size = fontsize,family = "sans"),
-                    axis.line = element_line(linewidth = linesize),
-                    strip.background = element_blank(),
-                    strip.text = element_text(size = titlefontsize,face = "bold"),
-                    plot.title = element_text(hjust = 0.5,size = titlefontsize),
-                    legend.position = "right")
+      theme(  text = element_text( size = fontsize),
+              axis.ticks = element_line(linewidth = linesize),
+              axis.text.x = element_text( size = axis_x_fontsize),
+              axis.text.y = element_text( size = axis_y_fontsize),
+              axis.title = element_text(size = fontsize,family = "sans"),
+              axis.line = element_line(linewidth = linesize),
+              strip.background = element_blank(),
+              aspect.ratio = aspect.ratio,
+              strip.text = element_text(size = titlefontsize,face = "bold"),
+              plot.title = element_text(hjust = 0.5,size = titlefontsize),
+              plot.margin = margin(1,1,1,1,'pt'),
+              legend.position = "right")
+  }
     if(rotate){
-      a = a+ theme(axis.text.x = element_text(angle = 30,hjust = 1))
+      a = a+ theme(axis.text.x = element_text(angle = angle,hjust = hjust,vjust = vjust))
     }
     return(a)
 }
@@ -93,7 +114,122 @@ data_summary <- function(x) {
 #          strip.background = element_rect(fill = NA),
 #          strip.text = element_text(size = 28,family = "sans",face = "bold.italic"),
 #          legend.position = "none") 
+###***--- For relative intensity plotting ---***###
+RI_plot = function(scp = scp, assay = character(),
+                   relative_to_Carrier = F,
+                   relative_to_Ref = F){
+  tmp = assay(scp,i = assay) %>% 
+    as.data.frame() %>% #drop_Nas(.,dims = 1) %>% 
+    rownames_to_column("Peptides") %>% 
+    gather(key = Channels, value = RI, -Peptides )
+  if(relative_to_Carrier|relative_to_Ref){
+    if(relative_to_Carrier){
+      tmp = assay(scp,i = assay) %>% as.data.frame()
+      coln = colnames(tmp)
+      tmp = apply(tmp,1, function(x){
+        x = as.numeric(x)
+        x = x/x[1]
+        return(x)
+      }) %>% t %>% as.data.frame()
+      colnames(tmp) = coln
+      tmp = tmp %>% rownames_to_column("Peptides") %>% gather(key = Channels, value = RI, -Peptides )
+    }else if(relative_to_Ref){
+      tmp = assay(scp,i = assay) %>% as.data.frame()
+      coln = colnames(tmp)
+      tmp = apply(tmp,1, function(x){
+        x = as.numeric(x)
+        x = x/x[2]
+        return(x)
+      }) %>% t %>% as.data.frame()
+      colnames(tmp) = coln
+      tmp = tmp %>% rownames_to_column("Peptides") %>% gather(key = Channels, value = RI, -Peptides )
+    }
+    coldata = colData(scp) %>% as.data.frame() %>% rownames_to_column("Channels")
+    tmp = merge(tmp,coldata,by = "Channels")
+    p = ggplot(tmp,aes( x = TMTlabel, y = log10(RI), fill = celltype )) +
+      geom_violin(size = 1,width = 2) + 
+      scale_y_continuous(limits = c(-5,2)) +
+      # geom_point( shape = 21,size=2, position = position_jitterdodge(), color="black",alpha=1) +
+      # ggbeeswarm::geom_quasirandom(shape = 22,size=5, dodge.width = .75,alpha=1,show.legend = F)+
+      stat_summary(fun.data = data_summary,linewidth = 0.7,
+                   color = "black",fatten = 3,geom = "pointrange") +
+      scale_fill_manual( values = gradient_cols) + 
+      scale_color_manual( values = gradient_cols ) + 
+      # geom_vline( aes( xintercept = quantile(medianRI,0.95,na.rm = T)),size = 2,lty = 2) +
+      ylab("log10(medianRI)") + xlab(NULL) + ggtitle(assay) + 
+      Themes(pt_size = 2,axis_x_fontsize = 16,axis_y_fontsize = 20,fontsize = 18,titlefontsize = 20,linesize = 1)
+    return(p)
+  }
+  coldata = colData(scp) %>% as.data.frame() %>% rownames_to_column("Channels")
+  tmp = merge(tmp,coldata,by = "Channels")
+  
+  p = ggplot(tmp,aes( x = TMTlabel, y = log10(RI), fill = celltype )) +
+    geom_violin(size = 1,width = 1) + 
+    scale_y_continuous( limits = c(0,6)) +
+    # geom_point( shape = 21,size=2, position = position_jitterdodge(), color="black",alpha=1) +
+    # ggbeeswarm::geom_quasirandom(shape = 22,size=5, dodge.width = .75,alpha=1,show.legend = F)+
+    stat_summary(fun.data = data_summary,linewidth = 0.7,
+                 color = "black",fatten = 3,geom = "pointrange") +
+    scale_fill_manual( values = gradient_cols) + 
+    scale_color_manual( values = gradient_cols ) + 
+    # geom_vline( aes( xintercept = quantile(medianRI,0.95,na.rm = T)),size = 2,lty = 2) +
+    ylab("log10(medianRI)") + xlab(NULL) + ggtitle(assay) + 
+    Themes(pt_size = 2,axis_x_fontsize = 16,axis_y_fontsize = 20,fontsize = 18,titlefontsize = 20,linesize = 1)
+  return(p)
+}
 
+###***--- For donut plotting ---***###
+Donut_plot = function( data = data.frame(),
+                       is_freq = logical(),
+                       manual_cols = character(),
+                       cat_num = numeric(),
+                       palette = character(),
+                       xmax = 4,xmin = 3,x=4.5,xlim = c(1,5),
+                       col_name = character()){
+  if (!is_freq) {
+    colnames(data) = c("category","count")
+    data$category = factor(data$category,ordered = T)
+    # Compute percentages
+    data$fraction <- data$count / sum(data$count)
+  }else{
+    colnames(data) = c("category","fraction")
+  }
+  # Compute the cumulative percentages (top of each rectangle)
+  data$ymax <- cumsum(data$fraction)
+  # Compute the bottom of each rectangle
+  data$ymin <- c(0, head(data$ymax, n=-1))
+  # Compute label position
+  data$labelPosition = (data$ymax + data$ymin) / 2
+  if (is_freq) {
+   data$label = ifelse(data$fraction==0,"NA",
+                      paste0(round(data$fraction,digits = 1),"%"))
+  }else{
+    data$label = ifelse(data$fraction==0,"NA",
+                      paste0(round(data$fraction*100,digits = 1),"%"))
+  }
+  
+  if(!sjmisc::is_empty(manual_cols)){
+    cols = manual_cols
+  }else{
+    cols = brewer.pal(palette, n = cat_num)
+  }
+  names(cols) = col_name
+  
+  p = ggplot(data, aes(ymax=ymax, ymin=ymin, xmax=xmax, xmin=xmin, fill=category)) +
+    geom_rect(na.rm = F) +
+    geom_text( x=x, aes(y=labelPosition,
+                          label=label),
+               position = position_identity(),
+               color="black", size=4,check_overlap = F) + # x here controls label position (inner / outer)
+    scale_fill_manual( values = cols ) +
+    coord_polar(theta="y") +
+    xlim(xlim) +
+    theme_void() +
+    theme( text = element_text(size = 20),
+           legend.title = element_blank() )
+  p
+  return(p)
+}
 ###***--- For PCA plotting ---***###
 PCA_point = function(data = data.frame(),
                      Group_shape = character(),
@@ -101,7 +237,8 @@ PCA_point = function(data = data.frame(),
                      deviation = numeric(),
                      color = character(),
                      shape = c(16:21),
-                     pt_size = 8,alpha = 1,
+                     pt_size = 8,
+                     alpha = 1,
                      fontsize = 28,linesize = 2
                      ){
     require(rlang)
@@ -109,30 +246,31 @@ PCA_point = function(data = data.frame(),
     require(cowplot)
     if(!rlang::is_empty(Group_shape)){
         p = ggplot() +
-            geom_point( data = data,aes_string(x = "PC1", y = "PC2", color = Group_color, shape = Group_shape),
+            geom_point( data = data,aes_string(x = "PC1", y = "PC2",
+                                               color = Group_color, shape = Group_shape),
                         size = pt_size ) +
             # xlab(paste0("PC1 (",round(deviation[1],1),"% )")) +
             # ylab(paste0("PC2 (",round(deviation[2],1),"% )")) +
             scale_color_manual( values = alpha(color ,alpha = alpha) )+ 
             scale_shape_manual(values = c(16,17,18,19,20,21) ) + theme_cowplot()+
             theme( text = element_text( size = fontsize),
-                    axis.ticks = element_line(size = linesize),
+                    axis.ticks = element_line(linewidth = linesize),
                     axis.text = element_text( size = fontsize),
                     axis.title = element_text(size = fontsize,family = "sans"),
-                    axis.line = element_line(size = linesize))
+                    axis.line = element_line(linewidth = linesize))
     }else {
        p = ggplot(data) +
-            geom_point( data = data,aes_string(x = "PC1", y = "PC2", color = Group_color),
+            geom_point( data = data,aes_string(x = "PC1", y = "PC2",color = Group_color),
                         size = pt_size  ) + 
             # xlab(paste0("PC1 (",round(deviation[1],1),"% )")) +
             # ylab(paste0("PC2 (",round(deviation[2],1),"% )")) +
             scale_color_manual( values = alpha(color ,alpha = alpha) )+ 
             theme_cowplot()+
             theme(  text = element_text( size = fontsize),
-                    axis.ticks = element_line(size = linesize),
+                    axis.ticks = element_line(linewidth = linesize),
                     axis.text = element_text( size = fontsize),
                     axis.title = element_text(size = fontsize,family = "sans"),
-                    axis.line = element_line(size = linesize))
+                    axis.line = element_line(linewidth = linesize))
     }
     if(!rlang::is_empty(deviation)){
         p = p + xlab(paste0("PC1 (",round(deviation[1],1),"% )")) +
@@ -156,27 +294,62 @@ axis = ggplot( data = data.frame(0:1) ) +
 
 ###***--- For single cell boxplotting ---***###
 library(reshape2)
-BoxPlot = function( seurat.data,
+ExprPlot = function( seurat.data,
+                    assay = character(),
+                    Idents = character(),
                     features = character(),
+                    plot_type = 'boxplot',
                     ncol = 3,
-                    cell.type = character() ){
-  mat = t(as.matrix(ho.hsc[["SCT.regressed"]] @data[ gene.list,]))
-  cell.cluster = data.frame(Cluster = paste0("t",cell.type,as.integer(Idents(ho.hsc))),
-                            row.names = names(Idents(ho.hsc)))
+                    cell_cols = character()){
+  Idents(seurat.data) = Idents
+  order = levels(features[,c(1)])
+  mat = t(as.matrix(seurat.data[[assay]]@data[rownames(features),]))
+  colnames(mat) = features[,c(1)]
+  # cell.cluster = data.frame(Cluster = paste0(cell.type,as.integer(Idents(seurat.data))),
+  #                           row.names = names(Idents(seurat.data)))
+  cell.cluster = data.frame(Cluster = Idents(seurat.data),
+                            row.names = names(Idents(seurat.data)))
   mat = cbind(cell.cluster,mat) %>% rownames_to_column("Cells")
   mat = melt( mat,id.vars = c("Cluster","Cells"),variable.name = "Genes")
-  p = ggplot( mat ) +
-    geom_boxplot( aes( x = Cluster, y = value, fill =  Cluster) ) + 
-    #scale_fill_manual(values =brewer.pal( length(levels(Idents(ho.hsc))),"Paired" ),) +
-    facet_wrap( .~Genes, ncol = ncol) +
-    theme_cowplot() + ylab( "Normalized Expression" )+ xlab(NULL)+
-    theme( text = element_text( family = "sans",size = 20 ),
-           axis.text =  element_text( family = "sans",size = 16 ),
-           strip.placement = "inside",
-           strip.background = element_rect( color = NA,fill = NA ),
-           legend.position = "none",
-           panel.border = element_rect( colour = "black",size = 1 ))
-  p
+  mat$Genes = factor(mat$Genes,levels = order,ordered = T)
+  mat = mat %>% arrange(.,Genes)
+  if(plot_type=='boxplot'){
+    p = ggplot( mat ) +
+      geom_boxplot( aes( x = Cluster, y = value, fill =  Cluster),outlier.size = 0.6 ) + 
+      scale_fill_manual(values = cell_cols) +
+      scale_y_continuous(limits = c(-1.2,1.2)) +
+      facet_wrap( .~Genes, ncol = ncol) +
+      theme_cowplot() + ylab( "Normalized Expression" )+ xlab(NULL)+
+      theme( text = element_text( family = "sans",size = 20 ),
+             axis.text =  element_text( family = "sans",size = 16 ),
+             strip.placement = "inside",
+             axis.line = element_blank(),
+             strip.background = element_rect( color = NA,fill = NA ),
+             legend.position = "none",
+             panel.border = element_rect( colour = "black",size = 1 ))
+    return(p)
+  }else if(plot_type=='violinplot'){
+    p = ggplot( mat,aes( x = Cluster, y = value, fill =  Cluster) ) +
+      geom_violin( size = 0.6,width = 1) + 
+      # scale_y_continuous(limits = c(,2)) +
+      # geom_point( shape = 21,size=2, position = position_jitterdodge(), color="black",alpha=1) +
+      # ggbeeswarm::geom_quasirandom(shape = 22,size=5, dodge.width = .75,alpha=1,show.legend = F)+
+      stat_summary(fun.data = data_summary,linewidth = 0.5,
+                   color = "black",fatten = 3,geom = "pointrange") +
+      scale_fill_manual( values = cell_cols) + 
+      scale_color_manual( values = cell_cols ) + 
+      facet_wrap( .~Genes, ncol = ncol) +
+      # geom_vline( aes( xintercept = quantile(medianRI,0.95,na.rm = T)),size = 2,lty = 2) +
+      theme_cowplot() + ylab( "Normalized Expression" )+ xlab(NULL)+
+      theme( text = element_text( family = "sans",size = 20 ),
+             axis.text =  element_text( family = "sans",size = 16 ),
+             strip.placement = "inside",
+             axis.line = element_blank(),
+             strip.background = element_rect( color = NA,fill = NA ),
+             legend.position = "none",
+             panel.border = element_rect( colour = "black",size = 1 ))
+    return(p)
+  }
 }
 
 ###***--- For GO plotting with text and filtration ---***###
@@ -185,20 +358,27 @@ GO_Plot = function( GO_dataset, padj_threshold=0.05, show_num = 15,
                     fontsize = 2,fontcolor = "black",
                     barwidth = 0.8,
                     GO_term = character(),
-                    keywords = character(),
+                    keywords = character(),random_size_each = 2,
                     discard = character()){
   tmp = GO_dataset@result
   tmp = tmp[which(tmp$p.adjust<padj_threshold),] 
   tmp$logpval = (-log10( tmp$pvalue ))
   tmp  = tmp %>% arrange( dplyr::desc(logpval),dplyr::desc(Count)) 
-  
+  ids = character()
+  seek = character()
   if(!is_empty( GO_term )){
-    tmp = tmp %>% filter( ONTOLOGY %in% GO_term )
+ 
+    for( i in GO_term){
+      j = tmp$Description[tmp$ID==i]
+      ids = c(ids,j)
+    }
+    if(length(ids)==0){return("No aim GO ID was found!")}
   }
   if(!is_empty( keywords )){
-    seek = numeric()
+
     for( i in keywords){
       j = grep(i,tmp$Description,value = T)
+      j = sample(j,size = random_size_each)
       seek = c(seek,j)
     }
     if(length(seek)==0){return("No aim GO terms was found!")}
@@ -206,9 +386,13 @@ GO_Plot = function( GO_dataset, padj_threshold=0.05, show_num = 15,
   if(show_num==0){
     all_term = unique(seek)
   }else {
-    all_term = unique(c(tmp$Description[1:min(length(tmp$Description),show_num)],seek))
+    if(!is_empty(seek)|!is_empty(ids)){
+      all_term = unique(c(tmp$Description[1:min(length(tmp$Description),show_num)],ids,seek))
+    }else{
+      all_term = unique(c(tmp$Description[1:min(length(tmp$Description),show_num)]))
+    }
   }
-  if(length(discard)!=0){
+  if(!is_empty( discard )){
     remove = numeric()
     for( i in discard){
       j = grep(i,tmp$Description,value = T)
@@ -237,12 +421,9 @@ GO_Plot = function( GO_dataset, padj_threshold=0.05, show_num = 15,
            axis.line = element_line(size = 1.5),
            axis.ticks = element_line(size = 1.5),
            axis.ticks.y = element_blank()
-           
     )
   return(go)
 }
-
-
 
 
 # load( "../exvivo/parameter.rds/cellcycle.genes.RData" )
